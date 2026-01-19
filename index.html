@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SKYWATCH OS | DEFENSE NETWORK</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+    <style>
+        /* --- KERNEL STYLES --- */
+        :root {
+            --bg-os: #000000;
+            --taskbar-bg: rgba(10, 15, 20, 0.9);
+            --window-bg: #050608;
+            --border-active: #00f3ff;
+            --border-inactive: #333;
+            --accent: #00f3ff;
+            --text: #e2e8f0;
+            --danger: #ef4444;
+            --font-ui: 'Segoe UI', sans-serif;
+            --font-mono: 'Courier New', monospace;
+        }
+
+        * { box-sizing: border-box; user-select: none; }
+        body { margin: 0; padding: 0; background: var(--bg-os); color: var(--text); font-family: var(--font-ui); height: 100vh; overflow: hidden; cursor: default; }
+
+        /* BOOT SCREEN */
+        #boot-screen {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: #000; z-index: 9999; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; font-family: var(--font-mono);
+            color: var(--accent);
+        }
+        .boot-log { font-size: 12px; margin-top: 20px; color: #555; height: 100px; overflow: hidden; text-align: center; }
+
+        /* DESKTOP ENVIRONMENT */
+        #desktop {
+            position: absolute; top: 0; left: 0; width: 100%; height: calc(100% - 40px);
+            background: radial-gradient(circle at center, #111 0%, #000 100%);
+            background-size: 50px 50px;
+            background-image: 
+                linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+        }
+
+        /* DESKTOP ICONS */
+        .icon-grid {
+            display: flex; flex-direction: column; gap: 20px; padding: 20px; flex-wrap: wrap; height: 100%; align-content: flex-start;
+        }
+        .desktop-icon {
+            width: 80px; text-align: center; cursor: pointer; padding: 10px; border: 1px solid transparent; border-radius: 4px; transition: 0.2s;
+        }
+        .desktop-icon:hover { background: rgba(0, 243, 255, 0.1); border-color: rgba(0, 243, 255, 0.3); }
+        .desktop-icon i { font-size: 32px; color: var(--text); margin-bottom: 5px; text-shadow: 0 0 10px var(--accent); }
+        .desktop-icon span { font-size: 11px; text-shadow: 1px 1px 2px #000; display: block; }
+
+        /* WINDOW SYSTEM */
+        .window {
+            position: absolute; background: var(--window-bg); border: 1px solid var(--border-inactive);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.8); display: flex; flex-direction: column;
+            min-width: 300px; min-height: 200px; transition: opacity 0.2s;
+            resize: both; overflow: auto;
+        }
+        .window.active { border-color: var(--border-active); z-index: 100; }
+        
+        .title-bar {
+            background: #0f1219; padding: 8px; border-bottom: 1px solid #222;
+            display: flex; justify-content: space-between; align-items: center; cursor: grab;
+        }
+        .title-bar:active { cursor: grabbing; }
+        .win-title { font-size: 11px; font-weight: bold; text-transform: uppercase; color: var(--accent); letter-spacing: 1px; display: flex; gap: 8px; align-items: center; }
+        .win-controls { display: flex; gap: 5px; }
+        .win-btn { width: 12px; height: 12px; border-radius: 50%; cursor: pointer; }
+        .close-btn { background: #ff5f56; }
+        .max-btn { background: #28c940; }
+        .min-btn { background: #ffbd2e; }
+
+        .win-content { flex: 1; overflow: auto; padding: 0; position: relative; color: #ccc; font-size: 12px; }
+
+        /* TASKBAR */
+        #taskbar {
+            position: fixed; bottom: 0; left: 0; width: 100%; height: 40px;
+            background: var(--taskbar-bg); border-top: 1px solid #222;
+            display: flex; align-items: center; padding: 0 10px; z-index: 9999;
+            backdrop-filter: blur(10px);
+        }
+        #start-btn {
+            background: var(--accent); color: #000; font-weight: bold; padding: 5px 15px;
+            border-radius: 2px; cursor: pointer; display: flex; align-items: center; gap: 5px; font-size: 12px; margin-right: 15px;
+        }
+        .task-item {
+            padding: 5px 15px; margin-right: 5px; background: rgba(255,255,255,0.05);
+            border-bottom: 2px solid transparent; color: #aaa; cursor: pointer; font-size: 11px; transition: 0.2s;
+        }
+        .task-item:hover, .task-item.active { background: rgba(255,255,255,0.1); color: #fff; border-bottom-color: var(--accent); }
+        
+        #clock { margin-left: auto; font-family: var(--font-mono); font-size: 11px; color: var(--accent); }
+
+        /* APP SPECIFIC: INTEL FEED */
+        .intel-card { padding: 15px; border-bottom: 1px solid #222; transition: 0.2s; }
+        .intel-card:hover { background: #0a0c12; }
+        .intel-title { font-weight: bold; color: #fff; margin-bottom: 5px; cursor: pointer; }
+        .intel-meta { font-size: 10px; color: #666; display: flex; justify-content: space-between; }
+        
+        /* APP SPECIFIC: TERMINAL */
+        .terminal-body { background: #000; height: 100%; padding: 10px; font-family: var(--font-mono); color: #0f0; }
+        .term-line { margin-bottom: 2px; }
+        
+        /* APP SPECIFIC: CRYPTO */
+        .crypto-row { display: flex; justify-content: space-between; padding: 8px; border-bottom: 1px solid #222; font-family: var(--font-mono); }
+        .price-up { color: #10b981; } .price-down { color: #ef4444; }
+
+        /* UTILS */
+        input { background: #111; border: 1px solid #333; color: #fff; padding: 5px; width: 100%; margin-bottom: 5px; }
+        button { background: #222; color: #fff; border: 1px solid #444; padding: 5px 10px; cursor: pointer; }
+        button:hover { background: var(--accent); color: #000; }
+
+    </style>
+</head>
+<body>
+
+    <div id="boot-screen">
+        <i class="fas fa-biohazard fa-3x fa-spin" style="margin-bottom:20px;"></i>
+        <div style="font-size:24px; font-weight:bold; letter-spacing:5px;">SKYWATCH OS</div>
+        <div class="boot-log" id="boot-log">Loading Kernel...</div>
+    </div>
+
+    <div id="desktop">
+        <div class="icon-grid">
+            <div class="desktop-icon" onclick="OS.openApp('Intel Hub', 'intel')">
+                <i class="fas fa-satellite-dish"></i>
+                <span>Intel Hub</span>
+            </div>
+            <div class="desktop-icon" onclick="OS.openApp('Global Map', 'map')">
+                <i class="fas fa-globe-asia"></i>
+                <span>Global Map</span>
+            </div>
+            <div class="desktop-icon" onclick="OS.openApp('Terminal', 'term')">
+                <i class="fas fa-terminal"></i>
+                <span>Terminal</span>
+            </div>
+            <div class="desktop-icon" onclick="OS.openApp('Market Watch', 'crypto')">
+                <i class="fas fa-chart-line"></i>
+                <span>Markets</span>
+            </div>
+            <div class="desktop-icon" onclick="OS.openApp('AI Core', 'ai')">
+                <i class="fas fa-brain"></i>
+                <span>AI Core</span>
+            </div>
+            <div class="desktop-icon" onclick="OS.openApp('System', 'sys')">
+                <i class="fas fa-cogs"></i>
+                <span>Settings</span>
+            </div>
+        </div>
+    </div>
+
+    <div id="taskbar">
+        <div id="start-btn"><i class="fas fa-layer-group"></i> START</div>
+        <div id="task-list" style="display:flex;"></div>
+        <div id="clock">00:00:00 UTC</div>
+    </div>
+
+    <script>
+        
+        // --- WINDOW MANAGER KERNEL ---
+        class OperatingSystem {
+            constructor() {
+                this.windows = [];
+                this.zCounter = 100;
+                this.booting = true;
+            }
+
+            boot() {
+                const log = document.getElementById('boot-log');
+                const msgs = [
+                    "Initializing Kernel...", "Mounting File System...", "Loading Drivers...",
+                    "Connecting to SatLink...", "Decrypting Secure Storage...", "Starting UI Service...",
+                    "ACCESS GRANTED"
+                ];
+                let i = 0;
+                const interval = setInterval(() => {
+                    if(i >= msgs.length) {
+                        clearInterval(interval);
+                        document.getElementById('boot-screen').style.display = 'none';
+                        this.booting = false;
+                        this.playSound('startup');
+                    } else {
+                        log.innerText += `\n> ${msgs[i]}`;
+                        log.scrollTop = log.scrollHeight;
+                        i++;
+                    }
+                }, 400);
+
+                // Clock
+                setInterval(() => {
+                    const now = new Date();
+                    document.getElementById('clock').innerText = now.toISOString().split('T')[1].split('.')[0] + " UTC";
+                }, 1000);
+            }
+
+            openApp(title, type) {
+                this.zCounter++;
+                const id = 'win-' + Date.now();
+                const win = document.createElement('div');
+                win.className = 'window active';
+                win.id = id;
+                win.style.zIndex = this.zCounter;
+                win.style.left = (100 + (this.windows.length * 20)) + 'px';
+                win.style.top = (50 + (this.windows.length * 20)) + 'px';
+                win.style.width = '600px';
+                win.style.height = '400px';
+
+                // Content generation based on App Type
+                let contentHTML = '';
+                if(type === 'intel') contentHTML = this.getAppIntel();
+                if(type === 'map') contentHTML = this.getAppMap(id);
+                if(type === 'term') contentHTML = this.getAppTerminal();
+                if(type === 'crypto') contentHTML = this.getAppCrypto();
+                if(type === 'ai') contentHTML = this.getAppAI();
+                if(type === 'sys') contentHTML = this.getAppSys();
+
+                win.innerHTML = `
+                    <div class="title-bar" onmousedown="OS.dragStart(event, '${id}')">
+                        <div class="win-title"><i class="fas fa-square"></i> ${title}</div>
+                        <div class="win-controls">
+                            <div class="win-btn min-btn"></div>
+                            <div class="win-btn max-btn" onclick="OS.maximize('${id}')"></div>
+                            <div class="win-btn close-btn" onclick="OS.closeWindow('${id}')"></div>
+                        </div>
+                    </div>
+                    <div class="win-content" id="${id}-content">${contentHTML}</div>
+                `;
+
+                document.getElementById('desktop').appendChild(win);
+                this.windows.push(id);
+                this.addTaskbarItem(id, title);
+                
+                // Post-render initialization
+                if(type === 'map') setTimeout(() => this.initMap(id), 100);
+                if(type === 'term') setTimeout(() => this.initTerm(id), 100);
+            }
+
+            closeWindow(id) {
+                const el = document.getElementById(id);
+                if(el) el.remove();
+                this.windows = this.windows.filter(w => w !== id);
+                document.getElementById('task-' + id).remove();
+            }
+
+            dragStart(e, id) {
+                const win = document.getElementById(id);
+                this.zCounter++;
+                win.style.zIndex = this.zCounter;
+                
+                let shiftX = e.clientX - win.getBoundingClientRect().left;
+                let shiftY = e.clientY - win.getBoundingClientRect().top;
+
+                const moveAt = (pageX, pageY) => {
+                    win.style.left = pageX - shiftX + 'px';
+                    win.style.top = pageY - shiftY + 'px';
+                }
+
+                const onMouseMove = (event) => {
+                    moveAt(event.pageX, event.pageY);
+                }
+
+                document.addEventListener('mousemove', onMouseMove);
+
+                win.onmouseup = () => {
+                    document.removeEventListener('mousemove', onMouseMove);
+                    win.onmouseup = null;
+                };
+            }
+
+            addTaskbarItem(id, title) {
+                const bar = document.getElementById('task-list');
+                const item = document.createElement('div');
+                item.className = 'task-item';
+                item.id = 'task-' + id;
+                item.innerText = title;
+                item.onclick = () => {
+                    const win = document.getElementById(id);
+                    this.zCounter++;
+                    win.style.zIndex = this.zCounter;
+                };
+                bar.appendChild(item);
+            }
+
+            playSound(type) {
+                // AudioContext Logic for Sounds
+            }
+
+            // --- APP CONTENT GENERATORS ---
+
+            getAppIntel() {
+                return `
+                    <div style="padding:10px; height:100%; display:flex; flex-direction:column;">
+                        <div style="display:flex; gap:5px; margin-bottom:10px;">
+                            <input type="text" id="intel-search" placeholder="Search Vector (e.g. J-35)...">
+                            <button onclick="Apps.scanIntel()">SCAN</button>
+                        </div>
+                        <div id="intel-results" style="flex:1; overflow-y:auto; background:#000; border:1px solid #333;">
+                            <div style="padding:20px; text-align:center; color:#555;">WAITING FOR INPUT...</div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            getAppMap(id) {
+                return `<div id="${id}-map" style="width:100%; height:100%;"></div>`;
+            }
+
+            getAppTerminal() {
+                return `
+                    <div class="terminal-body" onclick="document.getElementById('term-in').focus()">
+                        <div id="term-out">SkyWatch OS [v13.0]<br>(c) 2026 Architect Corp.<br><br></div>
+                        <div style="display:flex;">
+                            <span style="color:#0f0; margin-right:5px;">root@skywatch:~#</span>
+                            <input type="text" id="term-in" style="background:transparent; border:none; color:#fff; padding:0; width:100%; font-family:inherit;" autocomplete="off">
+                        </div>
+                    </div>
+                `;
+            }
+
+            getAppCrypto() {
+                return `
+                    <div style="padding:10px;">
+                        <h3 style="margin-top:0; border-bottom:1px solid #333;">MARKET WATCH</h3>
+                        <div id="crypto-list">Loading Ticker...</div>
+                    </div>
+                `;
+            }
+
+            getAppAI() {
+                return `
+                    <div style="padding:10px; display:flex; flex-direction:column; height:100%;">
+                        <textarea id="ai-in" style="flex:1; background:#111; border:1px solid #333; color:#fff; padding:10px;" placeholder="Enter Data for Analysis..."></textarea>
+                        <div style="margin-top:10px; display:flex; gap:10px;">
+                            <input type="password" id="ai-key" placeholder="API Key">
+                            <button onclick="Apps.runAI()">ANALYZE</button>
+                        </div>
+                        <div id="ai-out" style="height:100px; margin-top:10px; background:#000; border:1px solid #333; padding:10px; overflow:auto; color:#0f0;"></div>
+                    </div>
+                `;
+            }
+            
+            getAppSys() {
+                return `
+                    <div style="padding:20px;">
+                        <h3>SYSTEM CONFIG</h3>
+                        <label>Theme Color</label>
+                        <select onchange="document.documentElement.style.setProperty('--accent', this.value)">
+                            <option value="#00f3ff">Cyber Blue</option>
+                            <option value="#ef4444">Red Alert</option>
+                            <option value="#10b981">SpecOps Green</option>
+                        </select>
+                        <br><br>
+                        <button onclick="location.reload()">REBOOT SYSTEM</button>
+                    </div>
+                `;
+            }
+
+            // --- APP INITIALIZERS ---
+
+            initMap(wid) {
+                const map = L.map(wid + '-map').setView([20, 0], 2);
+                L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 19 }).addTo(map);
+            }
+
+            initTerm(wid) {
+                const input = document.querySelector(`#${wid} #term-in`);
+                const out = document.querySelector(`#${wid} #term-out`);
+                input.addEventListener('keypress', (e) => {
+                    if(e.key === 'Enter') {
+                        const val = input.value;
+                        out.innerHTML += `<div>root@skywatch:~# ${val}</div>`;
+                        if(val === 'help') out.innerHTML += `<div style="color:#ccc">Commands: scan, clear, ping, date, reboot</div>`;
+                        if(val === 'ping') out.innerHTML += `<div>PONG: 14ms</div>`;
+                        if(val === 'clear') out.innerHTML = '';
+                        if(val === 'reboot') location.reload();
+                        input.value = '';
+                        out.scrollTop = out.scrollHeight;
+                    }
+                });
+            }
+        }
+
+        // --- APPS LOGIC (MOCK & REAL) ---
+        const Apps = {
+            async scanIntel() {
+                const q = document.getElementById('intel-search').value || "Defense";
+                const con = document.getElementById('intel-results');
+                con.innerHTML = '<div style="color:#0ff; padding:20px;">SCANNING GLOBAL NETWORKS...</div>';
+                
+                // Hybrid Scan: Reddit + Google RSS
+                let html = '';
+                
+                // Mock Real Data for Stability in single file
+                const mockData = [
+                    {src: "Reuters", title: "US Announces New Defense Package", time: "10m ago"},
+                    {src: "r/CombatFootage", title: "Footage of new drone prototype testing", time: "1h ago"},
+                    {src: "DefenseOne", title: "Cybersecurity threats rise in sector 7", time: "2h ago"},
+                    {src: "Jane's", title: "Analysis of J-35 Stealth Capabilities", time: "3h ago"}
+                ];
+
+                try {
+                    // Try Real Google RSS
+                    const url = `https://news.google.com/rss/search?q=${encodeURIComponent(q)} when:7d&hl=en-US&gl=US&ceid=US:en`;
+                    const res = await fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(url)}`);
+                    const data = await res.json();
+                    if(data.items) {
+                        data.items.forEach(i => {
+                            html += `
+                                <div class="intel-card">
+                                    <div class="intel-meta"><span>WEB INTEL</span><span>${i.pubDate.split(' ')[0]}</span></div>
+                                    <div class="intel-title" onclick="window.open('${i.link}')">${i.title}</div>
+                                </div>`;
+                        });
+                    }
+                } catch(e) {
+                    // Fallback
+                    mockData.forEach(i => {
+                         html += `
+                                <div class="intel-card">
+                                    <div class="intel-meta"><span>${i.src}</span><span>${i.time}</span></div>
+                                    <div class="intel-title">${i.title}</div>
+                                </div>`;
+                    });
+                }
+                con.innerHTML = html;
+            },
+
+            async runAI() {
+                const key = document.getElementById('ai-key').value;
+                const txt = document.getElementById('ai-in').value;
+                const out = document.getElementById('ai-out');
+                if(!key) { out.innerHTML = "ERROR: API KEY MISSING"; return; }
+                
+                out.innerHTML = "PROCESSING NEURAL REQUEST...";
+                
+                try {
+                    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
+                        body: JSON.stringify({
+                            model: "gpt-4o-mini",
+                            messages: [{role: "user", content: "Analyze: " + txt}]
+                        })
+                    });
+                    const data = await res.json();
+                    out.innerHTML = data.choices[0].message.content;
+                } catch(e) { out.innerHTML = "CONNECTION FAILED."; }
+            }
+        };
+
+        // --- INIT ---
+        const OS = new OperatingSystem();
+        window.onload = () => OS.boot();
+
+        // Crypto Ticker Simulator
+        setInterval(() => {
+            const list = document.getElementById('crypto-list');
+            if(list) {
+                const coins = [
+                    {n:'BTC', p: 98000 + Math.random()*500},
+                    {n:'ETH', p: 2700 + Math.random()*50},
+                    {n:'SOL', p: 140 + Math.random()*5}
+                ];
+                let html = '';
+                coins.forEach(c => {
+                    html += `<div class="crypto-row"><span>${c.n}</span><span class="price-up">$${c.p.toFixed(2)}</span></div>`;
+                });
+                list.innerHTML = html;
+            }
+        }, 2000);
+
+    </script>
+</body>
+</html>
